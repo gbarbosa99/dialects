@@ -1,0 +1,9 @@
+# Gitignore
+
+# data
+data/*
+
+# Pretrained Models
+models/
+
+
