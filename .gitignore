@@ -6,4 +6,6 @@ data/*
 # Pretrained Models
 models/
 
+# Working on it
+synthesized/prepare_for_wenet.py
 
