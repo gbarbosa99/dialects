@@ -1,0 +1,11 @@
+# Gitignore
+
+# data
+data/*
+
+# Pretrained Models
+models/
+
+# Working on it
+scripts/prepare_for_wenet.py
+
