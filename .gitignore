@@ -9,3 +9,11 @@ models/
 # Working on it
 scripts/prepare_for_wenet.py
 
+#Virtual Environment
+venv/
+
+# Openvoice repo
+openvoice/
+
+# Passages
+passages
