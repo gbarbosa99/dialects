@@ -1,12 +1,15 @@
 # Gitignore
 
-# data
+## Readings
+Readings/
+
+## data
 data/*
 
-# Pretrained Models
+## Pretrained Models
 models/
 
-# Working on it
+## Working on it
 scripts/prepare_for_wenet.py
 
 #Virtual Environment
@@ -17,3 +20,5 @@ openvoice/
 
 # Passages
 passages
+
+scripts/dialects_metadata.json

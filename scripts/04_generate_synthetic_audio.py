@@ -1,68 +1,106 @@
 import os
-import csv
-from pathlib import Path
-from pydub import AudioSegment
-
 import sys
+import csv
+import torch
+from pydub import AudioSegment
 from pathlib import Path
 
-# Add OpenVoice to the path (assuming script is in /scripts)
-openvoice_dir = Path(__file__).resolve().parent.parent / "OpenVoice"
-sys.path.insert(0, str(openvoice_dir))
+# Add parent directory (one level up from scripts/)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from inference import infer
+from openvoice import se_extractor
+from openvoice.api import BaseSpeakerTTS, ToneColorConverter
 
+# Now you can import modules from the local openvoice repo
+#import se_extractor
+#from api import BaseSpeakerTTS, ToneColorConverter
 
-# ------------- CONFIG ----------------
-BASE_DIR = Path(__file__).resolve().parent.parent
-PROCESSED_AUDIO_DIR = BASE_DIR / "data/processed"
-METADATA_PATH = BASE_DIR / "data/embeddings/synthetic_metadata.csv"
-SYNTHETIC_OUTPUT_DIR = BASE_DIR / "data/synthetic/output_wav"
-SYNTHETIC_METADATA_CSV = BASE_DIR / "data/synthetic/metadata.csv"
-REFERENCE_CLIP_DURATION_MS = 3000  # 3 seconds
-# -------------------------------------
+# --------- CONFIG ---------
+AUDIO_INPUT = BASE_DIR / "data/processed"
+METADATA_IN = BASE_DIR / "data/embeddings/synthetic_metadata.csv"
+SYNTHETIC_DIR = BASE_DIR / "data/synthetic"
+OUTPUT_WAV_DIR = SYNTHETIC_DIR / "output_wav"
+OUTPUT_CSV = SYNTHETIC_DIR / "metadata.csv"
+CHECKPOINT_BASE = BASE_DIR / "checkpoints/base_speakers/EN"
+CHECKPOINT_CONVERTER = BASE_DIR / "checkpoints/converter"
+REFERENCE_CLIP_MS = 3000
+ENCODE_MESSAGE = "@MyShell"
+# --------------------------
 
-def extract_reference_clip(source_path, ref_path, duration_ms=REFERENCE_CLIP_DURATION_MS):
-    """Extract the first N ms of audio as a reference clip"""
-    audio = AudioSegment.from_wav(source_path)
+def init_models(device):
+    base_tts = BaseSpeakerTTS(f"{CHECKPOINT_BASE}/config.json", device=device)
+    base_tts.load_ckpt(f"{CHECKPOINT_BASE}/checkpoint.pth")
+
+    tone_converter = ToneColorConverter(f"{CHECKPOINT_CONVERTER}/config.json", device=device)
+    tone_converter.load_ckpt(f"{CHECKPOINT_CONVERTER}/checkpoint.pth")
+
+    source_se = torch.load(f"{CHECKPOINT_BASE}/en_default_se.pth").to(device)
+    return base_tts, tone_converter, source_se
+
+def extract_reference_clip(audio_path, output_path, duration_ms=REFERENCE_CLIP_MS):
+    audio = AudioSegment.from_wav(audio_path)
     ref_clip = audio[:duration_ms]
-    ref_clip.export(ref_path, format="wav")
+    ref_clip.export(output_path, format="wav")
 
 def main():
-    os.makedirs(SYNTHETIC_OUTPUT_DIR, exist_ok=True)
-    metadata_out = open(SYNTHETIC_METADATA_CSV, "w")
-    writer = csv.writer(metadata_out)
-    writer.writerow(["audio_path", "text", "speaker_reference"])
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    os.makedirs(OUTPUT_WAV_DIR, exist_ok=True)
 
-    with open(METADATA_PATH, newline='') as f:
-        reader = csv.DictReader(f)
+    base_tts, tone_converter, source_se = init_models(device)
+
+    with open(METADATA_IN, newline='') as f_in, open(OUTPUT_CSV, "w", newline='') as f_out:
+        reader = csv.DictReader(f_in)
+        writer = csv.writer(f_out)
+        writer.writerow(["audio_path", "text", "reference_clip"])
+
         for row in reader:
-            audio_path = Path(row["audio_path"])
-            text = row["text"]
-            uid = audio_path.stem
-
-            # Paths for reference and output
-            ref_clip_path = SYNTHETIC_OUTPUT_DIR / f"{uid}_ref.wav"
-            synth_out_path = SYNTHETIC_OUTPUT_DIR / f"{uid}_synth.wav"
-
             try:
-                extract_reference_clip(audio_path, ref_clip_path)
+                full_path = Path(row["audio_path"])
+                text = row["text"]
+                uid = full_path.stem
 
-                # Run OpenVoice inference
-                infer(
-                    input_text=text,
-                    reference_audio=str(ref_clip_path),
-                    output_path=str(synth_out_path)
+                # File paths
+                ref_clip_path = OUTPUT_WAV_DIR / f"{uid}_ref.wav"
+                tts_output_path = OUTPUT_WAV_DIR / f"{uid}_tmp.wav"
+                final_output_path = OUTPUT_WAV_DIR / f"{uid}_synth.wav"
+
+                # Extract speaker reference clip
+                extract_reference_clip(full_path, ref_clip_path)
+
+                # Get target tone color embedding
+                target_se, _ = se_extractor.get_se(
+                    reference_audio_path=str(ref_clip_path),
+                    tone_color_converter=tone_converter,
+                    target_dir=str(OUTPUT_WAV_DIR),
+                    vad=True
                 )
 
-                writer.writerow([str(synth_out_path), text, str(ref_clip_path)])
-                print(f"Generated: {synth_out_path.name}")
+                # Step 1: Base speaker TTS
+                base_tts.tts(
+                    text=text,
+                    speaker='default',
+                    language='English',
+                    output_path=str(tts_output_path),
+                    speed=1.0
+                )
+
+                # Step 2: Convert tone to match reference speaker
+                tone_converter.convert(
+                    audio_src_path=str(tts_output_path),
+                    src_se=source_se,
+                    tgt_se=target_se,
+                    output_path=str(final_output_path),
+                    message=ENCODE_MESSAGE
+                )
+
+                writer.writerow([str(final_output_path), text, str(ref_clip_path)])
+                print(f"Generated: {final_output_path.name}")
 
             except Exception as e:
-                print(f"Failed to generate for {uid}: {e}")
+                print(f"Failed to process {row['audio_path']}: {e}")
 
-    metadata_out.close()
-    print(f"\n✅ Synthetic generation complete. Metadata saved to {SYNTHETIC_METADATA_CSV}")
+    print(f"\nDone! Synthetic files saved to: {OUTPUT_WAV_DIR}")
+    print(f"Metadata saved to: {OUTPUT_CSV}")
 
 if __name__ == "__main__":
     main()
