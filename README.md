@@ -10,10 +10,15 @@ The goal of this project is to develop an ML pipeline that:
 We are using the dialect archive website due to the rich variation of speaker dialects and accents in the audio files. Similar to how humans may not understand an accent the first time they hear it, an automatic speech recognition model may struggle to understand or transcribe speech in a new accent. The diversity in the data allows our model to perform better with new data. 
 
 ## Directory
+- [Things to Note](#Things-to-Note)
 - [Scraper](#Scraper)
 - [TTS Cloning](#TTS-Cloning)
 - [Synthesizer](#Synthesizer)
 - [Results](#Results)
+
+### Things to Note
+
+We are using the Assembly AI library in 02_prepocess_audio. An API key is needed in order for this script to work as intended. Create a .env script in the root directory and create an environment variable named MY_API_KEY in order for the script to work properly. 
 
 ### Scraper
 

@@ -21,4 +21,9 @@ openvoice/
 # Passages
 passages
 
+# .env
+.env
+
+# Scripts
 scripts/dialects_metadata.json
+scripts/02_preprocess_audio.py
