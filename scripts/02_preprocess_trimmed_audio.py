@@ -65,13 +65,13 @@ def main():
 
     aai.settings.api_key = api_key
     transcripts = []
-    i = 0
+    i = 0 # used for testing
 
     for file_name in os.listdir(AUDIO_DIR):
         if not file_name.endswith(".mp3"):
             continue
         
-        while i < 1:
+        while i < 1: # used for testing
             try:
                 file_path = os.path.join(AUDIO_DIR, file_name)
 
