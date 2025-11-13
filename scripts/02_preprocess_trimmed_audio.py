@@ -9,6 +9,7 @@ from pathlib import Path
 import soundfile as sf
 import assemblyai as aai 
 import csv
+from dotenv import load_dotenv
 
 # -------CONFIG---------
 BASE_DIR = Path(__file__).resolve().parent.parent # go up from /scripts
@@ -54,7 +55,8 @@ def trim_audio(start_time, file_name, file_path, output_dir):
 
 def main():
 
-    api_key = os.environ.get("MY_API_KEY")
+    load_dotenv()
+    api_key = os.getenv("MY_API_KEY")
 
     if api_key:
         print("API Key retrieved successfully.")
