@@ -19,14 +19,17 @@ AUDIO_DIR = BASE_DIR / "data/raw"
 TXT_DIR = BASE_DIR / "data/raw"
 
 OUTPUT_DIR = BASE_DIR / "data/processed"
+OUTPUT_FAILED_DIR = BASE_DIR / "data/processed/failed"
+
 OUTPUT_TRANSCRIPTS = OUTPUT_DIR / "full_transcripts.csv"
+OUTPUT_FAILED = OUTPUT_DIR / "failed_transcripts.csv"
 # ----------------------
 
 # Not currently using torch to convert audio to waveform. This can be done if needed for the model we are using.
 
 # Step 1: Separate audio into speakers and add timestamps to separate narrator from speech
 def transcribe_and_timestamp_audio(file_path, file_name):
-    #Convert to wav first
+    # Convert original to WAV
     audio = AudioSegment.from_file(file_path)
 
     with NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
@@ -36,14 +39,36 @@ def transcribe_and_timestamp_audio(file_path, file_name):
     config = aai.TranscriptionConfig(speaker_labels=True)
     transcript = aai.Transcriber().transcribe(tmp_path, config)
 
-    #first_utterance = True
+    # Try to find speaker B
     for utterance in transcript.utterances:
         if utterance.speaker == "B":
             return file_name, utterance.start, utterance.text
-    
-    # No speaker B found
+
+    # ----- No speaker B found: log + save audio -----
     print(f"[WARN] No speaker B found in {file_name}")
+
+    # Ensure failed dir exists
+    os.makedirs(OUTPUT_FAILED_DIR, exist_ok=True)
+
+    # Compute stats about the transcript safely
+    speakers = {u.speaker for u in transcript.utterances} if transcript.utterances else set()
+    num_speakers = len(speakers)
+    full_text = " ".join(u.text for u in transcript.utterances) if transcript.utterances else ""
+
+    # Append to failed CSV (create header if file doesn't exist yet)
+    failed_csv_exists = os.path.exists(OUTPUT_FAILED)
+    with open(OUTPUT_FAILED, 'a', newline='') as failed:
+        writer = csv.writer(failed)
+        if not failed_csv_exists:
+            writer.writerow(["Filename", "Total speakers", "Transcript"])
+        writer.writerow([file_name, num_speakers, full_text])
+
+    # Save failed audio clip for inspection
+    failed_wav_path = OUTPUT_FAILED_DIR / file_name.replace(".mp3", ".wav")
+    audio.export(failed_wav_path, format='wav')
+
     return file_name, None, None
+
 
 
 # Step 2: Trim narrator speech from audio using Pydub. Save audio as Wav in output folder.
