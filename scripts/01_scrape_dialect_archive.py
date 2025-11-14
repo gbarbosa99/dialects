@@ -4,6 +4,10 @@ import os
 import time
 import json
 
+from urllib.parse import urljoin
+from pydub import AudioSegment
+import shutil
+
 headers = {
 "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117.0"
 }
@@ -131,19 +135,8 @@ def get_speaker_urls():
         
     return speakers
 
+
 def get_audio(output_dir):
-    """
-    Use scraper to download audio from link <class="wp-audio-shortcode"> in src
-    save audio to ../data/raw
-    save transcriptions to a json file in ../data/raw/transcription.json with audio file names
-
-    input:
-    flat list - [continent, country, speaker_id]
-
-    output:
-    mp4 files
-    transcription.json
-    """
     os.makedirs(output_dir, exist_ok=True)
     updated_speakers = []
 
@@ -155,53 +148,78 @@ def get_audio(output_dir):
         speaker = entry['speaker'].lower().replace(' ', '_')
         speaker_url = entry['url']
 
-        base_filename = f"{continent}_{speaker}"
+        base_filename = f"{continent}_{country}_{speaker}"
         audio_path = os.path.join(output_dir, base_filename + ".mp3")
         text_path = os.path.join(output_dir, base_filename + ".txt")
 
         try:
-            response = requests.get(speaker_url, headers=headers)
+            page_resp = requests.get(speaker_url, headers=headers, timeout=15)
+            page_resp.raise_for_status()
 
-            if response.status_code != 200:
-                print(f'Failed to load page. Status code: {response.status_code}')
-                return {}
-            
-            soup = bf(response.text, 'html.parser')
-
-            # Locate the main container
+            soup = bf(page_resp.text, 'html.parser')
             audio_url = extract_audio_url(soup)
 
             if not audio_url:
-                print(f"No audio found for: {speaker}")
+                print(f"[WARN] No audio found for: {speaker}")
                 continue
 
-            audio_data = requests.get(audio_url).content
-            with open(audio_path, 'wb') as f:
-                f.write(audio_data)
+            # Make absolute URL
+            audio_url = urljoin(speaker_url, audio_url)
 
-            # Get transcript
+            # Download audio with basic validation
+            audio_resp = requests.get(audio_url, headers=headers, stream=True, timeout=30)
+            audio_resp.raise_for_status()
+
+            content_type = audio_resp.headers.get("Content-Type", "")
+            if "audio" not in content_type and "mpeg" not in content_type:
+                print(f"[WARN] Non-audio content for {speaker}: {content_type}")
+                continue
+
+            # Stream to disk
+            with open(audio_path, 'wb') as f:
+                for chunk in audio_resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            # Validate audio with pydub/ffmpeg
+            try:
+                audio = AudioSegment.from_file(audio_path)
+            except Exception as e:
+                print(f"[ERROR] Invalid audio for {speaker} ({audio_path}): {e}")
+                os.remove(audio_path)
+                continue
+
+            # Optional: normalize to WAV, 16k mono
+            audio = audio.set_channels(1)
+            audio = audio.set_frame_rate(16000)
+            wav_path = audio_path.replace(".mp3", ".wav")
+            audio.export(wav_path, format='wav')
+            os.remove(audio_path)
+            audio_path = wav_path
+
+            # Get transcript text as you already do
             article = soup.find('div', class_='article')
             transcript = ""
             if article:
                 paragraphs = article.find_all('p')
                 for p in paragraphs:
-                    text=p.get_text(strip=True)
-                    length = len(text.split())
-                    if length > 50:
+                    text = p.get_text(strip=True)
+                    if len(text.split()) > 50:
                         transcript = text
+                        break  # first long paragraph is enough
 
             with open(text_path, 'w') as t:
                 t.write(transcript)
-            
+
             entry['audio_url'] = audio_url
             entry['local_audio_path'] = audio_path
             entry['transcript'] = transcript
 
             updated_speakers.append(entry)
-            time.sleep(1)
+            time.sleep(1)  # be polite to the site
 
         except Exception as e:
-            print(f'Error processing {speaker_url}: {e}')
+            print(f'[ERROR] Processing {speaker_url}: {e}')
             continue
 
     with open(os.path.join(output_dir, 'dialects_metadata.json'), 'w') as f:
