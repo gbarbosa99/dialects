@@ -1,12 +1,22 @@
 import requests
 from bs4 import BeautifulSoup as bf
+
 import os
 import time
 import json
 
 from urllib.parse import urljoin
 from pydub import AudioSegment
-import shutil
+
+"""
+
+Purpose:
+
+Scrape audio and transcripts from the dialect archive. This database contains accented speech recordings from around the globe 
+that will be very useful when training the ASR model to recognize edge-case speech patterns. 
+
+"""
+
 
 headers = {
 "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/117.0"
@@ -197,7 +207,7 @@ def get_audio(output_dir):
             os.remove(audio_path)
             audio_path = wav_path
 
-            # Get transcript text as you already do
+            # Get transcript text 
             article = soup.find('div', class_='article')
             transcript = ""
             if article:
@@ -216,7 +226,7 @@ def get_audio(output_dir):
             entry['transcript'] = transcript
 
             updated_speakers.append(entry)
-            time.sleep(1)  # be polite to the site
+            time.sleep(1)  
 
         except Exception as e:
             print(f'[ERROR] Processing {speaker_url}: {e}')

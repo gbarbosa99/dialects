@@ -1,8 +1,4 @@
 import os
-import sys
-import shutil
-import torch
-import torchaudio
 from pydub import AudioSegment
 from io import BytesIO
 from pathlib import Path
@@ -12,8 +8,17 @@ import csv
 from dotenv import load_dotenv
 from tempfile import NamedTemporaryFile
 
-# -------CONFIG---------
-BASE_DIR = Path(__file__).resolve().parent.parent # go up from /scripts
+"""
+
+Purpose: 
+
+Preprocesss and transcribe speaker data from scraped raw data. Remove the narrator's snippet at the beginning of each recording by 
+timestamping when the second user begins speaking and trimming the beginning of the audio up until that point.
+
+"""
+
+# -------CONFIG--------
+BASE_DIR = Path(__file__).resolve().parent.parent 
 
 AUDIO_DIR = BASE_DIR / "data/raw"
 TXT_DIR = BASE_DIR / "data/raw"
@@ -24,8 +29,6 @@ OUTPUT_FAILED_DIR = BASE_DIR / "data/processed/failed"
 OUTPUT_TRANSCRIPTS = OUTPUT_DIR / "full_transcripts.csv"
 OUTPUT_FAILED = OUTPUT_DIR / "failed_transcripts.csv"
 # ----------------------
-
-# Not currently using torch to convert audio to waveform. This can be done if needed for the model we are using.
 
 # Step 1: Separate audio into speakers and add timestamps to separate narrator from speech
 def transcribe_and_timestamp_audio(file_path, file_name):
@@ -83,8 +86,11 @@ def trim_audio(start_time, file_name, file_path, output_dir):
     print(f'Trimmed and saved: {output_path}')
 
 # Step 3: Should we save the transcript from the python library or from the website? 
-# We could just save the transcription from first function to a separate csv for each recording?
-# We should check if the transcript from the library matches the transript from the website since these speakers have heavy accents.
+"""
+We could just save the transcription from first function to a separate csv for each recording?
+We should check if the transcript from the library matches the transript from the website since these speakers have heavy accents.
+"""
+
 
 def main():
     load_dotenv()
@@ -102,7 +108,7 @@ def main():
     processed = 0
 
     for file_name in os.listdir(AUDIO_DIR):
-        if not file_name.endswith(".mp3"):
+        if not file_name.endswith(".wav"):
             continue
         
         if processed >= max_files:
