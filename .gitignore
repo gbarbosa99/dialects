@@ -26,4 +26,4 @@ passages
 
 # Scripts
 scripts/dialects_metadata.json
-scripts/phased_out
+scripts/phased_out/*
