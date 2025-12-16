@@ -108,11 +108,8 @@ def main():
     processed = 0
 
     for file_name in os.listdir(AUDIO_DIR):
-        if not file_name.endswith(".wav"):
+        if not file_name.endswith(".wav") or not file_name.endswith(".mp3"):
             continue
-        
-        if processed >= max_files:
-            break
 
         try:
             file_path = os.path.join(AUDIO_DIR, file_name)
