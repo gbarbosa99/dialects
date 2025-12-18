@@ -14,6 +14,7 @@ scripts/prepare_for_wenet.py
 
 #Virtual Environment
 venv/
+ovvenv/
 
 # Openvoice repo
 openvoice/
